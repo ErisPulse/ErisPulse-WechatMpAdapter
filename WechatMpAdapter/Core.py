@@ -38,7 +38,7 @@ class WechatMpAccountConfig(BotAccountConfig):
         metadata={
             "description": "公众号AppID",
             "required": True,
-            "webui": {"widget": "text", "group": "basic", "order": 1},
+            "ui": {"widget": "text", "group": "basic", "order": 1},
         },
     )
     appsecret: str = field(
@@ -47,7 +47,7 @@ class WechatMpAccountConfig(BotAccountConfig):
             "description": "公众号AppSecret",
             "required": True,
             "secret": True,
-            "webui": {"widget": "password", "group": "basic", "order": 2},
+            "ui": {"widget": "password", "group": "basic", "order": 2},
         },
     )
     token: str = field(
@@ -55,7 +55,7 @@ class WechatMpAccountConfig(BotAccountConfig):
         metadata={
             "description": "回调验证Token（公众号后台设置的Token）",
             "secret": True,
-            "webui": {"widget": "password", "group": "callback", "order": 3},
+            "ui": {"widget": "password", "group": "callback", "order": 3},
         },
     )
     encoding_aes_key: str = field(
@@ -63,14 +63,14 @@ class WechatMpAccountConfig(BotAccountConfig):
         metadata={
             "description": "消息加解密密钥（安全模式/兼容模式，43位）",
             "secret": True,
-            "webui": {"widget": "password", "group": "callback", "order": 4},
+            "ui": {"widget": "password", "group": "callback", "order": 4},
         },
     )
     callback_path: str = field(
         default="/mp/{account}",
         metadata={
             "description": "微信回调路径模板（{account}会被账户名替换）",
-            "webui": {"widget": "text", "group": "callback", "order": 5},
+            "ui": {"widget": "text", "group": "callback", "order": 5},
         },
     )
     verified: bool = field(
@@ -78,7 +78,7 @@ class WechatMpAccountConfig(BotAccountConfig):
         metadata={
             "description": "是否为认证服务号（认证号可用客服消息主动推送，未认证号只能被动回复）",
             "required": False,
-            "webui": {"widget": "switch", "group": "basic", "order": 6},
+            "ui": {"widget": "switch", "group": "basic", "order": 6},
         },
     )
 
