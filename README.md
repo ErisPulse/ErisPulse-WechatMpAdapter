@@ -1,6 +1,25 @@
-# ErisPulse-WechatMpAdapter
+<div align="center">
 
-ErisPulse 的微信公众号（WechatMp）适配模块。遵循 ErisPulse 多账户适配器规范，通过被动回调（Webhook）接收消息，通过客服消息/模板消息接口主动发送消息。
+<img src=".github/assets/ErisPulseLogo.png" width="180" alt="ErisPulse WechatMpAdapter" />
+
+# ErisPulse WechatMpAdapter
+
+**微信公众号适配器 —— 把公众号变成机器人。**
+
+ErisPulse 的微信公众号（WechatMp）适配模块。遵循 ErisPulse 多账户适配器规范，通过被动回调（Webhook）接收消息，通过客服消息 / 模板消息接口主动发送，支持消息加解密与签名验证。
+
+<p>
+  <a href="https://pypi.org/project/ErisPulse-WechatMpAdapter/"><img src="https://img.shields.io/pypi/v/ErisPulse-WechatMpAdapter?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
+  <a href="https://pypi.org/project/ErisPulse-WechatMpAdapter/"><img src="https://img.shields.io/badge/Python-3.10+-FFD43B?style=for-the-badge&logo=python&logoColor=blue" alt="Python"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/ErisPulse/ErisPulse-WechatMpAdapter"><img src="https://img.shields.io/github/stars/ErisPulse/ErisPulse-WechatMpAdapter?style=for-the-badge&logo=github&color=brightgreen" alt="Stars"></a>
+  <a href="https://pepy.tech/project/ErisPulse-WechatMpAdapter"><img src="https://img.shields.io/pepy/dt/ErisPulse-WechatMpAdapter?style=for-the-badge&color=blue" alt="Downloads"></a>
+  <a href="https://github.com/ErisPulse/ErisPulse"><img src="https://img.shields.io/badge/Powered_by-ErisPulse-FF6B9D?style=for-the-badge&logo=bookstack&logoColor=white" alt="ErisPulse"></a>
+</p>
+
+</div>
+
+---
 
 ## 特性
 
