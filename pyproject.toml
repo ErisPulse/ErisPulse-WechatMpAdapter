@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "ErisPulse-WechatMpAdapter"
 version = "4.2.0"
 description = "ErisPulse的微信公众号(WechatMp)适配模块"
