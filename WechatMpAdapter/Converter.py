@@ -3,7 +3,10 @@ import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional
 
 
-class WechatMpConverter:
+from ErisPulse.Core.Bases import BaseConverter
+
+
+class WechatMpConverter(BaseConverter):
     """
     微信公众号事件转换器
 

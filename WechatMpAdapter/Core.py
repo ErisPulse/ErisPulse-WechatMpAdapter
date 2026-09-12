@@ -11,8 +11,13 @@ from typing import Any, Dict, List, Optional, Union
 
 from ErisPulse.Core import client, router
 from ErisPulse.Core.Bases.adapter import BaseAdapter
+from ErisPulse.Core.Bases import BotAccountConfig
 from ErisPulse.Core.Event import register_event_mixin, unregister_platform_event_methods
-from ErisPulse.runtime.config_schema import BotAccountConfig
+
+__version__ = "4.2.0"
+
+# 软依赖的框架最低版本（运行时检测，仅提示不强制）
+MIN_FRAMEWORK_VERSION = (2, 7, 1)
 
 # 被动回复上下文：webhook 请求中通过此透传到 call_api
 _passive_reply_ctx: contextvars.ContextVar = contextvars.ContextVar(
@@ -406,6 +411,73 @@ class WechatMpAdapter(BaseAdapter):
         self._running = False
         self._registered_routes: List[tuple] = []
         self._register_event_methods()
+        self._check_framework_version()
+        self._get_logger().info(f"WechatMpAdapter v{__version__} 已加载")
+
+    @staticmethod
+    def _parse_version(version_str: str) -> tuple:
+        """解析版本号为可比较的三元组（忽略 dev/预发布后缀，如 2.8.0-dev.3 → (2, 8, 0)）"""
+        parts = []
+        for piece in str(version_str).split("."):
+            digits = "".join(ch for ch in piece if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        while len(parts) < 3:
+            parts.append(0)
+        return tuple(parts[:3])
+
+    def _check_framework_version(self):
+        """软依赖检测：框架版本过低时打警告（不阻断加载）"""
+        try:
+            from importlib.metadata import version as _pkg_version
+
+            raw = _pkg_version("ErisPulse")
+        except Exception:
+            return
+        try:
+            if self._parse_version(raw) < MIN_FRAMEWORK_VERSION:
+                self._get_logger().warning(
+                    f"当前 ErisPulse 版本 {raw} 过低：WechatMpAdapter v{__version__} 需要 >= "
+                    f"{'.'.join(map(str, MIN_FRAMEWORK_VERSION))}，"
+                    "部分功能可能不可用，建议升级框架"
+                )
+        except Exception:
+            pass
+
+    # ==================== Api DSL（最小集） ====================
+
+    class Api(BaseAdapter.Api):
+        """微信公众号标准 API 动作实现（最小集）"""
+
+        async def get_self_info(self) -> dict:
+            account_name, account = self._adapter._resolve_account(self._account_id)
+            return self._adapter.make_response(
+                data={
+                    "user_id": str(getattr(account, "appid", "")),
+                    "user_name": f"wechatmp:{account_name}",
+                    "verified": bool(getattr(account, "verified", False)),
+                }
+            )
+
+        async def get_status(self) -> dict:
+            ad = self._adapter
+            bots = []
+            for name, account in ad.accounts.items():
+                bots.append({
+                    "self": {"platform": ad.platform, "user_id": str(getattr(account, "appid", "")), "account_id": name},
+                    "online": ad._running and name in ad._converters,
+                })
+            return ad.make_response(data={"good": any(b["online"] for b in bots), "bots": bots})
+
+        async def get_version(self) -> dict:
+            from . import __version__
+
+            return self._adapter.make_response(
+                data={"impl": "ErisPulse-WechatMpAdapter", "version": __version__, "onebot_version": "12"}
+            )
+
+        async def get_supported_actions(self) -> dict:
+            actions = {"get_self_info", "get_status", "get_version", "get_supported_actions"}
+            return self._adapter.make_response(data=sorted(actions))
 
     def _get_config_key(self) -> str:
         return "WechatMpAdapter"

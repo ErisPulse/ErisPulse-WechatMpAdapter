@@ -1,1 +1,1 @@
-from .Core import WechatMpAdapter
+from .Core import WechatMpAdapter, __version__
