@@ -1,20 +1,18 @@
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [Русский](README.ru.md)
+
 <div align="center">
 
-<img src=".github/assets/ErisPulseLogo.png" width="180" alt="ErisPulse WechatMpAdapter" />
+<img src="https://raw.githubusercontent.com/ErisPulse/ErisPulse/main/.github/assets/ErisPulseLogo.png" width="180" alt="ErisPulse-WechatMpAdapter" />
 
-# ErisPulse WechatMpAdapter
+# ErisPulse-WechatMpAdapter
 
-**微信公众号适配器 —— 把公众号变成机器人。**
-
-ErisPulse 的微信公众号（WechatMp）适配模块。遵循 ErisPulse 多账户适配器规范，通过被动回调（Webhook）接收消息，通过客服消息 / 模板消息接口主动发送，支持消息加解密与签名验证。
+**ErisPulse adapter for WeChat Official Account — webhook callback + customer/template messages**
 
 <p>
   <a href="https://pypi.org/project/ErisPulse-WechatMpAdapter/"><img src="https://img.shields.io/pypi/v/ErisPulse-WechatMpAdapter?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
   <a href="https://pypi.org/project/ErisPulse-WechatMpAdapter/"><img src="https://img.shields.io/badge/Python-3.10+-FFD43B?style=for-the-badge&logo=python&logoColor=blue" alt="Python"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
-  <a href="https://github.com/ErisPulse/ErisPulse-WechatMpAdapter"><img src="https://img.shields.io/github/stars/ErisPulse/ErisPulse-WechatMpAdapter?style=for-the-badge&logo=github&color=brightgreen" alt="Stars"></a>
-  <a href="https://pepy.tech/project/ErisPulse-WechatMpAdapter"><img src="https://img.shields.io/pepy/dt/ErisPulse-WechatMpAdapter?style=for-the-badge&color=blue" alt="Downloads"></a>
-  <a href="https://github.com/ErisPulse/ErisPulse"><img src="https://img.shields.io/badge/Powered_by-ErisPulse-FF6B9D?style=for-the-badge&logo=bookstack&logoColor=white" alt="ErisPulse"></a>
+  <a href="https://github.com/ErisPulse/ErisPulse/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
+  <img src="https://raw.githubusercontent.com/ErisPulse/.github/main/assets/badges/adapter.svg" alt="ErisPulse">
 </p>
 
 </div>
