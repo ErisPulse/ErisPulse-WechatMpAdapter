@@ -6,7 +6,7 @@
 
 # ErisPulse-WechatMpAdapter
 
-**ErisPulse adapter for WeChat Official Account — webhook callback + customer/template messages**
+**ErisPulse 微信公众号适配器 — Webhook 回调 + 客服 / 模板消息**
 
 <p>
   <a href="https://pypi.org/project/ErisPulse-WechatMpAdapter/"><img src="https://img.shields.io/pypi/v/ErisPulse-WechatMpAdapter?style=for-the-badge&logo=pypi&logoColor=white" alt="PyPI"></a>
