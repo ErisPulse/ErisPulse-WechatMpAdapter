@@ -2,8 +2,11 @@ import asyncio
 import contextvars
 import hashlib
 import io
+import os
+import re
 import struct
 import time
+import urllib.parse
 import xml.etree.ElementTree as ET
 from base64 import b64decode
 from dataclasses import dataclass, field
@@ -14,7 +17,7 @@ from ErisPulse.Core.Bases.adapter import BaseAdapter
 from ErisPulse.Core.Bases import BotAccountConfig
 from ErisPulse.Core.Event import register_event_mixin, unregister_platform_event_methods
 
-__version__ = "4.3.0"
+__version__ = "4.3.1"
 
 # 软依赖的框架最低版本（运行时检测，仅提示不强制）
 MIN_FRAMEWORK_VERSION = (2, 7, 1)
@@ -32,6 +35,29 @@ from .Converter import WechatMpConverter
 
 # 微信 API 基地址
 MP_API_BASE = "https://api.weixin.qq.com/cgi-bin"
+
+# bytes 上传时按 media_type 兜底的默认文件名
+_MP_DEFAULT_UPLOAD_NAMES = {"image": "image.jpeg", "voice": "voice.mp3", "video": "video.mp4"}
+
+
+def _looks_like_base64(value: str) -> bool:
+    """判断字符串是否具备裸 base64 特征（长字符串、合法字符集、长度为 4 的倍数）"""
+    return (
+        len(value) >= 256
+        and len(value) % 4 == 0
+        and bool(re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", value))
+    )
+
+
+def _detect_media_extension(file_bytes: bytes) -> Optional[str]:
+    """用 filetype 库按魔数探测扩展名，未安装或无法识别时返回 None"""
+    try:
+        import filetype
+
+        kind = filetype.guess(file_bytes)
+        return kind.extension if kind else None
+    except Exception:
+        return None
 
 
 def _forward_node_text(node: Dict) -> str:
@@ -266,28 +292,48 @@ class WechatMpAdapter(BaseAdapter):
                 account_id = ctx.get("account_id")
                 target_id = ctx.get("target_id")
 
+                segments = self._apply_modifiers(message)
+
                 results = []
-                for segment in message:
+                for segment in segments:
                     seg_type = segment.get("type", "")
                     seg_data = segment.get("data", {})
 
-                    call = await self._convert_ob12_to_mp(
+                    call, fail_msg = await self._convert_ob12_to_mp(
                         seg_type, seg_data, target_id, account_id
                     )
+                    if fail_msg:
+                        self._reset_modifiers()
+                        return self._adapter.make_error(retcode=10002, message=fail_msg)
                     if call is None:
                         continue
-                    result = await self._do_send(call, account_id)
+                    try:
+                        result = await self._do_send(call, account_id)
+                    except Exception as e:
+                        self._adapter.logger.error(f"调用微信公众号API失败: {e}")
+                        self._reset_modifiers()
+                        return self._adapter.make_error(
+                            retcode=33001, message=f"API调用失败: {e}"
+                        )
                     results.append(result)
 
                 self._reset_modifiers()
-                return results[-1] if results else None
+                if not results:
+                    return self._adapter.make_error(
+                        retcode=10002, message="没有可发送的消息内容"
+                    )
+                return results[-1]
 
             return asyncio.create_task(_send())
 
         async def _convert_ob12_to_mp(
             self, seg_type: str, seg_data: dict, touser: str, account_id: str
-        ) -> Optional[Dict]:
-            """将单个 OneBot12 消息段转换为微信客服消息调用"""
+        ) -> tuple:
+            """将单个 OneBot12 消息段转换为微信客服消息调用
+
+            返回 (call, fail_msg)：fail_msg 非空表示发送失败；call 为 None 且
+            fail_msg 为空表示跳过该段。
+            """
             params: Dict[str, Any] = {"touser": touser}
 
             if seg_type == "text":
@@ -296,31 +342,37 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "image":
                 file_val = seg_data.get("file", "")
                 media_id = await self._ensure_media_id(file_val, "image", account_id)
+                if not media_id:
+                    return None, "image 段 media_id 获取失败，无法发送"
                 params["msgtype"] = "image"
                 params["image"] = {"media_id": media_id}
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
-            if seg_type == "voice":
+            if seg_type in ("voice", "audio"):
                 file_val = seg_data.get("file", "")
                 media_id = await self._ensure_media_id(file_val, "voice", account_id)
+                if not media_id:
+                    return None, f"{seg_type} 段 media_id 获取失败，无法发送"
                 params["msgtype"] = "voice"
                 params["voice"] = {"media_id": media_id}
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "video":
                 file_val = seg_data.get("file", "")
                 media_id = await self._ensure_media_id(file_val, "video", account_id)
+                if not media_id:
+                    return None, "video 段 media_id 获取失败，无法发送"
                 params["msgtype"] = "video"
                 params["video"] = {
                     "media_id": media_id,
@@ -330,7 +382,7 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "music":
                 params["msgtype"] = "music"
@@ -344,7 +396,7 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "news":
                 params["msgtype"] = "news"
@@ -352,7 +404,7 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "mp_news":
                 params["msgtype"] = "mp_news"
@@ -360,7 +412,7 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": params,
-                }
+                }, None
 
             if seg_type == "template":
                 template_params: Dict[str, Any] = {
@@ -373,7 +425,7 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/template/send",
                     "params": template_params,
-                }
+                }, None
 
             if seg_type == "mp_menu":
                 menu_params: Dict[str, Any] = {
@@ -388,15 +440,14 @@ class WechatMpAdapter(BaseAdapter):
                 return {
                     "endpoint": "message/custom/send",
                     "params": menu_params,
-                }
+                }, None
 
-            # 不支持的消息段类型：作为纯文本提示
-            params["msgtype"] = "text"
-            params["text"] = {"content": f"[不支持的消息类型: {seg_type}]"}
-            return {
-                "endpoint": "message/custom/send",
-                "params": params,
-            }
+            if seg_type == "file":
+                return None, "不支持的消息类型: file（微信客服消息不支持文件）"
+
+            # 不支持的消息段类型：跳过
+            self._adapter.logger.warning(f"忽略不支持的消息段: {seg_type}")
+            return None, None
 
         async def _do_send(self, call: Dict, account_id: str) -> Dict:
             endpoint = call["endpoint"]
@@ -410,7 +461,7 @@ class WechatMpAdapter(BaseAdapter):
         ) -> str:
             """确保获得 media_id。
 
-            - 若 file_val 已是 media_id（以 'media:' 前缀标记，或无 http/本地路径特征）则直接使用
+            - 若 file_val 已是 media_id（以 'media:' 前缀标记，或无 URL/file:/data:/裸 base64/路径特征）则直接使用
             - 否则上传文件获取 media_id
             """
             if not file_val:
@@ -420,12 +471,13 @@ class WechatMpAdapter(BaseAdapter):
             if isinstance(file_val, str) and file_val.startswith("media:"):
                 return file_val[6:]
 
-            # 形似 media_id 的字符串（非 URL 且非明显文件路径）直接使用
+            # 形似 media_id 的字符串（非 URL/file:/data:/裸 base64 且非文件路径）直接使用
             if isinstance(file_val, str) and not file_val.startswith(
-                ("http://", "https://")
+                ("http://", "https://", "file://", "file:", "data:")
             ):
-                # 不含路径分隔符且无明显扩展名，视为 media_id
-                if not any(sep in file_val for sep in ("/", "\\")):
+                if not _looks_like_base64(file_val) and not any(
+                    sep in file_val for sep in ("/", "\\")
+                ):
                     return file_val
 
             # 需要上传
@@ -435,7 +487,9 @@ class WechatMpAdapter(BaseAdapter):
             return media_id or ""
 
         def _reset_modifiers(self):
-            pass
+            self._at_user_ids = []
+            self._at_all = False
+            self._reply_message_id = None
 
     # ==================== 适配器主类 ====================
 
@@ -768,28 +822,68 @@ class WechatMpAdapter(BaseAdapter):
             return None
 
         # 读取文件内容
+        filename: Optional[str] = None
+        file_bytes: Optional[bytes] = None
         if isinstance(file_val, bytes):
             file_bytes = file_val
-            filename = f"upload.{media_type}"
         elif isinstance(file_val, str):
-            if file_val.startswith(("http://", "https://")):
+            ref = file_val
+            if ref.startswith(("http://", "https://")):
                 try:
-                    resp = await client.get(file_val)
+                    resp = await client.get(ref)
                     file_bytes = await resp.read()
-                    filename = file_val.rsplit("/", 1)[-1] or f"upload.{media_type}"
+                    filename = (
+                        os.path.basename(ref.split("?", 1)[0].split("#", 1)[0]) or None
+                    )
                 except Exception as e:
                     self.logger.error(f"下载媒体文件失败: {e}")
                     return None
             else:
-                try:
-                    with open(file_val, "rb") as f:
-                        file_bytes = f.read()
-                    filename = file_val.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-                except Exception as e:
-                    self.logger.error(f"读取本地媒体文件失败: {e}")
+                if ref.startswith("file://"):
+                    ref = ref[len("file://"):]
+                elif ref.startswith("file:"):
+                    ref = ref[len("file:"):]
+                if os.path.isfile(ref):
+                    try:
+                        with open(ref, "rb") as f:
+                            file_bytes = f.read()
+                        filename = ref.replace("\\", "/").rsplit("/", 1)[-1] or None
+                    except Exception as e:
+                        self.logger.error(f"读取本地媒体文件失败: {e}")
+                        return None
+                elif ref.startswith("data:"):
+                    header, _, payload = ref.partition(",")
+                    try:
+                        if "base64" in header:
+                            file_bytes = b64decode(payload)
+                        else:
+                            file_bytes = urllib.parse.unquote(payload).encode("utf-8")
+                    except Exception as e:
+                        self.logger.error(f"解码 data: URI 失败: {e}")
+                        return None
+                elif _looks_like_base64(ref):
+                    try:
+                        file_bytes = b64decode(ref, validate=True)
+                    except Exception as e:
+                        self.logger.error(f"解码 base64 媒体数据失败: {e}")
+                        return None
+                else:
+                    self.logger.error(f"文件不存在或不是有效路径: {ref}")
                     return None
         else:
             return None
+
+        if file_bytes is None:
+            return None
+
+        if not filename:
+            detected_ext = _detect_media_extension(file_bytes)
+            if detected_ext:
+                filename = f"upload.{detected_ext}"
+            else:
+                filename = _MP_DEFAULT_UPLOAD_NAMES.get(
+                    media_type, f"upload.{media_type}"
+                )
 
         url = (
             f"{MP_API_BASE}/media/upload?access_token={access_token}&type={media_type}"
