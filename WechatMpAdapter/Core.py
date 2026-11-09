@@ -17,7 +17,7 @@ from ErisPulse.Core.Bases.adapter import BaseAdapter
 from ErisPulse.Core.Bases import BotAccountConfig
 from ErisPulse.Core.Event import register_event_mixin, unregister_platform_event_methods
 
-__version__ = "4.3.1"
+__version__ = "4.3.2"
 
 # 软依赖的框架最低版本（运行时检测，仅提示不强制）
 MIN_FRAMEWORK_VERSION = (2, 7, 1)
@@ -544,6 +544,7 @@ class WechatMpAdapter(BaseAdapter):
                 data={
                     "user_id": str(getattr(account, "appid", "")),
                     "user_name": f"wechatmp:{account_name}",
+                    "user_displayname": f"wechatmp:{account_name}",
                     "verified": bool(getattr(account, "verified", False)),
                 }
             )
@@ -703,7 +704,7 @@ class WechatMpAdapter(BaseAdapter):
         """格式化微信 API 响应为标准响应"""
         if not isinstance(raw_response, dict):
             return self.make_error(
-                retcode=34000,
+                retcode=34100,
                 message=f"API 返回了意外格式: {type(raw_response)}",
                 raw=raw_response,
             )
@@ -721,8 +722,9 @@ class WechatMpAdapter(BaseAdapter):
                 raw=raw_response,
             )
         else:
+            # 平台错误统一 34100，原始 errcode 保留在 mp_raw 中
             resp = self.make_error(
-                retcode=34000 + errcode,
+                retcode=34100,
                 message=errmsg,
                 raw=raw_response,
             )
@@ -741,7 +743,9 @@ class WechatMpAdapter(BaseAdapter):
         :param _account_id: 账户名
         :param params: API 参数（不含 access_token）
         """
-        account_name, account = self._resolve_account(_account_id)
+                # 标准字段 account_id 与旧名 _account_id 双兼容（ApiDSL.Using 传标准名）
+        account_id = params.pop("account_id", None) or _account_id
+        account_name, account = self._resolve_account(account_id)
         echo = params.pop("echo", None)
 
         # 非认证号：检查是否在被动回复上下文中
@@ -764,11 +768,11 @@ class WechatMpAdapter(BaseAdapter):
                     "retcode": 0,
                     "data": {"passive_reply": True},
                     "message_id": "",
-                    "message": "passive_reply",
+                    "message": "",
                 }
             # 不在被动回复上下文中（如定时任务）→ 报错
             error_resp = self.make_error(
-                retcode=34003,
+                retcode=10003,
                 message=f"账户 {account_name} 未认证，无法使用客服消息主动推送，"
                 f"请在配置中设置 verified=true（认证服务号）或改用被动回复",
                 raw=None,
@@ -780,7 +784,7 @@ class WechatMpAdapter(BaseAdapter):
         access_token = await self._get_access_token(account_name)
         if not access_token:
             error_resp = self.make_error(
-                retcode=34001,
+                retcode=34100,
                 message=f"账户 {account_name} 无法获取access_token",
                 raw=None,
             )

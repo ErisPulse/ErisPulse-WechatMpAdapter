@@ -71,6 +71,7 @@ class WechatMpConverter(BaseConverter):
         event_id = str(msg_id) if msg_id else f"{create_time}_{from_user}"
         return {
             "id": event_id,
+            "message_id": str(msg_id) if msg_id else "",
             "time": create_time,
             "type": event_type,
             "detail_type": "private",

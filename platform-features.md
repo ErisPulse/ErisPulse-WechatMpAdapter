@@ -3,9 +3,53 @@
 ## 基本信息
 - 模块名称: `ErisPulse-WechatMpAdapter`
 - 平台标识: `mp`（别名: `wechat_mp`）
-- 模块版本: 4.0.0
+- 模块版本: 4.3.2
 - 维护者: ErisPulse
+- 最后更新: 2026-11-10
 - 依赖: `cryptography`
+
+## v5 范式更新（4.2.0）
+
+- **BaseConverter 继承**：转换器公共字段由框架 build_base_event 构建
+- **Api DSL 最小集**：get_self_info（appid）/get_status/get_version/get_supported_actions
+- **框架软依赖**：运行时检测 ErisPulse>=2.7.1 并提示；启动输出版本日志
+
+## 标准化对齐（4.3.2）
+
+响应结构与错误码遵循 API 响应规范。
+
+### 消息事件补齐 message_id
+
+消息事件顶层补齐标准 `message_id` 字段（取微信 MsgId，缺失时空串兜底），模块无需再从 `mp_msg_id` 读取。
+
+### 标准响应
+
+所有 `call_api` / Send 调用返回标准响应：`status` / `retcode` / `data` / `message_id` / `message` + 顶层 `mp_raw`。**被动回复成功时 `message` 为空串**（`data.passive_reply=true` 标识拦截为被动回复）。
+
+### 错误码规范
+
+| retcode | 含义 | 说明 |
+|---------|------|------|
+| 0 | 成功 | — |
+| 34100 | 平台失败 | 微信 API 返回 errcode != 0；**原始 errcode 保留在 `mp_raw`**。token 获取失败同属此码 |
+| 10003 | 参数错误 / 未认证 | 未认证账户（`verified=false`）在非被动回复上下文调用客服消息 |
+
+### 账户与多账户
+
+- `call_api` 支持双兼容账户字段：`account_id`（标准名）/ `_account_id`（旧名），框架 ApiDSL（`Api.Using(...)`）自动适配
+- `Send` 读取 `send_context`（事件账户兜底）
+- `get_self_info` 补齐标准字段：`user_id`（公众号 AppID）/ `user_name` / `user_displayname`（`wechatmp:{账户名}`）
+
+---
+
+
+### 已对接平台能力
+
+- **接收**：公众号回调消息与关注/取关等事件（明文/安全模式），签名校验
+- **发送**：客服消息（Text/Image 等，经 Send DSL）
+- **API**：账户信息（appid）与运行状态（最小集）
+
+---
 
 ## 支持的消息发送类型
 
@@ -32,6 +76,7 @@
 ### 重要限制
 - 客服消息只能在用户与公众号交互后 **48 小时内** 主动发送
 - 超过 48 小时需使用模板消息（需用户授权场景）
+- 未认证服务号（`verified=false`）无法主动发送，只能被动回复（见上方「认证服务号与被动回复」）
 
 ## 事件类型
 
@@ -102,6 +147,7 @@ appsecret = "your_app_secret_here"
 token = "your_callback_token"
 encoding_aes_key = ""                    # 安全模式/兼容模式才需要（43位）
 callback_path = "/mp/main"               # 回调路径
+verified = true                          # 是否为认证服务号（影响主动发送能力）
 enable = true
 
 [WechatMpAdapter.accounts.secondary]
@@ -121,7 +167,15 @@ enable = true
 | `token` | 否 | 回调验证 Token（建议填写以启用签名验证） |
 | `encoding_aes_key` | 否 | 消息加解密密钥（43位，安全模式必需） |
 | `callback_path` | 否 | 回调路径模板，默认 `/mp/{account}`，`{account}` 会被账户名替换 |
+| `verified` | 否 | 是否为**认证服务号**，默认 `true`（见下方说明） |
 | `enable` | 否 | 是否启用，默认 true |
+
+### 认证服务号与被动回复（verified）
+
+- `verified = true`（默认，认证服务号）：可随时使用**客服消息**主动推送（48 小时窗口内）与模板消息
+- `verified = false`（未认证订阅号）：
+  - 客服消息 / 模板消息**只能在 webhook 被动回复上下文中发送**（收到用户消息后 15 秒内、一次回复）——适配器会自动将发送截获为被动回复
+  - 主动推送（如定时任务）返回 `retcode=10003` 错误（未认证）
 
 ## 加密模式说明
 
@@ -153,5 +207,5 @@ enable = true
 所有 `call_api` 调用返回标准化响应：
 
 - 成功：`status: "ok"`, `retcode: 0`
-- 失败：`status: "failed"`, `retcode: 34000+errcode`
-- 始终包含 `mp_raw`（原始响应）、`message_id`
+- 失败：`status: "failed"`, `retcode: 34100`（平台失败；**原始 errcode 保留在 `mp_raw`**）或 `10003`（参数错误 / 未认证）
+- 始终包含 `mp_raw`（原始响应）与顶层 `message_id`（缺失时空串）
